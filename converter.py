@@ -1,4 +1,6 @@
 import json, sys
+from html import escape
+from string import ascii_lowercase
 from unittest import TestCase
 
 
@@ -13,10 +15,9 @@ def control():
 
 def openjson():
     try:
-        with open('source4.json') as f:
+        with open('source6.json') as f:
             data = json.load(f)
     except ValueError:
-        print('error')
         data = False
     return data
 
@@ -55,19 +56,60 @@ def traverse(data, child_of=False):
         tag = createtag(data, child_of)
         return tag
 
+"""Create main html syntax with optional params"""
 def createtag(data, child_of):
-    tag = '<%s>%s' % (data, child_of[data]) + '</%s>' % data
+    checkvaildtag(data)
+    tag_content = decodereserved(child_of[data])
+    if '.' in data or '#' in data:
+        newdata = correcttag(data)
+        tag = '<%s' % newdata[0]
+        if newdata[2]:
+            tag += ' id="%s"' % newdata[2]
+        if newdata[1]:
+            tag += ' class="%s"' % ' '.join(newdata[1])
+        tag += '>%s' % tag_content + '</%s>' % data[0]
+    else:
+        tag = '<%s>%s' % (data, tag_content) + '</%s>' % data
     if isinstance(child_of, list):
         tag = '<li>' + tag + '</li>'
     return tag
 
+"""Decode reserved html character into html entities"""
+def decodereserved(content):
+    tag_content = escape(content).encode('ascii', 'xmlcharrefreplace').decode()
+    return tag_content
+
+"""Changes shortened tags into list with tag type and selectors"""
+def correcttag(data):
+    data = data.split('.')
+    newdata = []
+    for i in data:
+        if '#' in i:
+            tempcut = i.split("#",1)
+            id = tempcut[1]
+            newdata.append(tempcut[0])
+        else:
+            newdata.append(i)
+    tag_type = newdata.pop(0)
+    data = [tag_type, newdata]
+    try:
+        data.append(id)
+    except UnboundLocalError:
+        data.append('')
+    return data
+
+def checkvaildtag(data):
+    if data[0] in ascii_lowercase:
+        return
+    output('Error. Wrong tag')
+
 def output(html):
     sys.stdout.write(html)
+    sys.exit()
 
 if __name__ == '__main__':
     html = ''
     control()
-
 
 class TestMainMethod(TestCase):
     def setUp(self):
@@ -78,19 +120,23 @@ class TestMainMethod(TestCase):
                 '</body></li></ul>'
         self.dict2 = [{'h3': 'Title #1', 'div': 'Hello, World 1!'}]
         self.result2 = '<ul><li><h3>Title #1</h3><div>Hello, World 1!</div>' \
-                    '</li></ul>'
+                '</li></ul>'
         self.dict3 = [{'h3': 'Title #1', 'div': 'Hello, World 1!'},
-                    {'h3': 'Title #2', 'div': 'Hello, World 2!'}]
+                {'h3': 'Title #2', 'div': 'Hello, World 2!'}]
         self.result3 = '<ul><li><h3>Title #1</h3><div>Hello, World 1!</div>' \
                 '</li><li><h3>Title #2</h3><div>Hello, World 2!</div></li></ul>'
         self.dict4 = [{'span': 'Title #1',
                 'content': [{'p': 'Example 1', 'header': 'header 1'}]},
                 {'div': 'div 1'}]
         self.result4 = '<ul><li><span>Title #1</span><content><ul><li><p>' \
-            'Example 1</p><header>header 1</header></li></ul></content></li>' \
-            '<li><div>div 1</div></li></ul>'
+                'Example 1</p><header>header 1</header></li></ul></content>' \
+                '</li><li><div>div 1</div></li></ul>'
         self.dict5 = {'p': 'Hello'}
         self.result5 = '<p>Hello</p>'
+        self.dict6 = {'p.my-class#my-id': 'hello',
+                'p.my-class1.my-class2': 'example<a>asd</a>'}
+        self.result6 = '<p id="my-id" class="my-class">hello</p><p ' \
+                'class="my-class1 my-class2">example&lt;a&gt;asd&lt;/a&gt;</p>'
 
     def test_base_first(self):
         self.assertEqual(convert(self.dict1), self.result1)
@@ -106,3 +152,6 @@ class TestMainMethod(TestCase):
 
     def test_base_fifth(self):
         self.assertEqual(convert(self.dict5), self.result5)
+
+    def test_base_sixth(self):
+        self.assertEqual(convert(self.dict6), self.result6)
